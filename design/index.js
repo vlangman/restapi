@@ -5,6 +5,7 @@ const Tables = require('./tables')
 const app = express()
 const port = 3000
 
+LoggedIn = false
 // init db
 class SQL_DB {
 
@@ -32,9 +33,14 @@ class SQL_DB {
     }
 
     createTables(){
-       this.execute(Tables.CREATE_USERS_TABLE)
+       this.execute(Tables.CREATE_USERS_TABLE).then(success=>{
+            this.execute(Tables.CREATE_ADMIN)
+       },err=>{
+           throw error
+       })
        this.execute(Tables.CREATE_PETS_TABLE)
        this.execute(Tables.CREATE_ORDERS_TABLE)
+
     }
 
     getInstance() {
@@ -110,15 +116,107 @@ app.get('/new/pet/', (req, res)=>{
    
 })
 
+app.get('/logout/', (req, res)=>{
+    LoggedIn = false
+    res.send({200: "LOGOUT WAS SUCCESSFUL"})
+})
+
+app.post('/delete/user', (req, res)=>{
+    if (!req.query.userID){
+        res.send({404:"ERROR: MISSING USER ID"})
+    }
+    if (!req.query.password){
+        res.send({404:"ERROR: MISSING PASSWORD"})
+    }
+    Tables.DELETE_USER(req.query.userID, req.query.password).then(query=>{
+        sql.execute(query).then(success=>{
+            res.send({200:"USER " + String(req.query.userID) + " HAS BEEN DELETED"})
+        }, err=>{
+            res.send({500:err})
+        })
+    })
+})
+
+app.post('/create/user',(req, res)=>{
+    if (!req.query.userName){
+        res.send({404:"ERROR: MISSING USERNAME"})
+    }
+    if (!req.query.password){
+        res.send({404:"ERROR: MISSING PASSWORD"})
+    }
+    Tables.CREATE_USER(req.query.userName,req.query.password).then(query=>{
+        sql.execute(query).then(success=>{
+            res.send({200:"USER "+ String(req.query.userName)+" CREAION SUCCESS"})
+        }, fail=>{
+            res.send({500:fail})
+        })
+    })
+})
+
+app.get('/update/user/', (req, res)=>{
+    if (!req.query.userName){
+        res.send({404:"ERROR: MISSING USERNAME"})
+    }
+    if (!req.query.password){
+        res.send({404:"ERROR: MISSING PASSWORD"})
+    }
+    if (!req.query.userID){
+        res.send({404:"ERROR: MISSING USERID"})
+    }
+    Tables.UPDATE_USER(req.query.userID, req.query.userName, req.query.password).then(query=>{
+        sql.execute(query).then(success=>{
+            res.send({200:"USER " +String(req.query.userID)+ " UPDATE SUCCESS "})
+        }, err=>{
+            res.send({500:err})
+        })
+    })
+})
+
+app.get('/get/user' , (req, res)=>{
+    if (!req.query.userName){
+        res.send({404:"ERROR: MISSING USERNAME"})
+    }
+    Tables.GET_USER(req.query.userName).then(query=>{
+        sql.execute(query).then(success=>{
+            res.send({200:success})
+        }, err=>{
+            res.send({500:error})
+        })
+
+    })
+})
+
+app.get('/login/', (req, res)=>{
+    if (!req.query.userName){
+        res.send({404:"ERROR: MISSING USERNAME"})
+    }
+    if (!req.query.password){
+        res.send({404:"ERROR: MISSING PASSWORD"})
+    }
+    Tables.LOGIN_USER(req.query.userName, req.query.password).then(query=>{
+        sql.execute(query).then(success=>{
+            console.log(success.length)
+            if (success.length == 1){
+                LoggedIn = success
+                res.send({200: "LOGIN WAS SUCCESSFUL"})
+            }else{
+                res.send({404:"ACCOUNT "+ req.query.userName + " NOT FOUND "})
+            }
+        }, error=>{
+            console.log(error)
+            res.send({500:error})
+        })
+    })
+})
 
 app.get('/update/pet/', (req, res)=>{
     petStatus = 0
     imageLink = ""
     if (!req.query.petID){
-        res.send("MISSING PETNAME")
+        res.send({404:"MISSING PETNAME"})
     }
     if (!req.query.petName){
-        res.send("MISSING PETNAME")
+        res.send({404:"MISSING PETNAME"})
     }
     if (req.query.petStatus){
         petStatus = req.query.petStatus
@@ -139,6 +237,27 @@ app.get('/update/pet/', (req, res)=>{
         }, (err)=>{
             console.log(err)
             res.send(err)
+        })
+    })
+})
+
+app.get('/list/pets/', (req, res)=>{
+    Tables.GET_STATUS().then(query=>{
+        sql.execute(query).then(success=>{
+            console.log(success)
+            list = {}
+            for (i = 0; i < success.length; i++) {
+                status = success[i]["PET_STATUS"]
+                Tables.GET_PET_BY_STATUS(status).then(query=>{
+                    sql.execute(query).then(result=>{
+                        list[status] = result.length
+                        console.log(list)
+                    })
+                })
+            }
+            res.send({200:list})
+        }, err=>{
+            res.send({500:err})
         })
     })
 })
@@ -219,6 +338,7 @@ app.get("/get/order/", (req, res)=>{
     }
     Tables.GET_PET_ORDER()
 })
+
 
 app.post("/pet/order/delete", (req, res)=>{
     if (!req.query.petID){
